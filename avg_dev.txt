@@ -1,6 +1,6 @@
-create or replace PACKAGE BODY                                                                                                                               PKG_AVERAGE_RESERVE as    
+create or replace PACKAGE BODY                                                                                                                                                                                                                                                    PKG_AVERAGE_RESERVE as    
 PROCEDURE process_avg_rsrv_rcrds_btch (parm_targets IN gurowner.avg_targets%rowtype, 
-  account_date in Date, parmbuf out varchar2, parmcode out varchar2,
+  account_date in Date, parm_runid in varchar2, parmbuf out varchar2, parmcode out varchar2,
   limit_in IN PLS_INTEGER DEFAULT 200)
   is
   /*-------------------------------------------------------------
@@ -250,16 +250,16 @@ PROCEDURE process_avg_rsrv_rcrds_btch (parm_targets IN gurowner.avg_targets%rowt
     Write title line for first pass calculations.
     ----------------------------------------------------------*/
     --DBMS_OUTPUT.PUT_LINE('CO     CLAIM_NO     ST COV  ESTAB_DT  ' || 
-    --  'SVRTY  SPLIT  CNT  ROUND COV  TRUNC FEAT  DIFF  ADJ   AVG SUM');
-  /*----------------------------------------------------------
-  First pass--collect balance numbers and calculate reserve.
-  ---------------------------------------------------------*/
-  /*----------------------------------------------------------
-   Collect balance totals. This SQL is the same as C1, except
-   for the join on factor table--we don't need that calculation.
-  ----------------------------------------------------------*/
+    -- 'SVRTY  SPLIT  CNT  ROUND COV  TRUNC FEAT  DIFF  ADJ   AVG SUM');
+    /*----------------------------------------------------------
+     First pass--collect balance numbers and calculate reserve.
+    ---------------------------------------------------------*/
+    /*----------------------------------------------------------
+     Collect balance totals. This SQL is the same as C1, except
+     for the join on factor table--we don't need that calculation.
+    ----------------------------------------------------------*/
 --  select sum(svrty / tb.feat_cnt), sum(CSE_RSV_AMNT), count(*)  -
-  select sum(svrty / tb.feat_cnt), sum(CSE_RSV_AMNT/tb.feat_cnt), count(*)  -- Changed code after test case#1
+  select sum(svrty / tb.feat_cnt), sum(CSE_RSV_AMNT / tb.feat_cnt), count(*)  -- Changed code after test case#1
   into avg_sum, balance_res, balance_res_num
     from GUROWNER.AVG_CL_CLMS ta
     inner join (
@@ -324,9 +324,10 @@ PROCEDURE process_avg_rsrv_rcrds_btch (parm_targets IN gurowner.avg_targets%rowt
     --   where a.prvt_psngr_grp = parm_targets.prvt_psngr_grp
     --   and a.ACTV_IN=c_yes and a.RSRV_TYP=c_avg AND a.PRVT_PSNGR_CD=ta.PRVT_PSNGR_CD)
   order by ta.clm_nmbr, ta.CVRG_CD, ta.CLM_SMBL, ta.CLMNT;
- --   balance_res := 666; --DEBUG BALANCE
+   --- balance_res := 666; --DEBUG BALANCE
   start_tm := Dbms_Utility.Get_Time;
   --dbms_output.put_line('start = ' || to_char(start_tm));
+  --DBMS_OUTPUT.PUT_LINE('avg sum = ' || to_char(avg_sum) || 'count = ' || to_char(balance_res_num));
   if target > 0 then
      goto bypass_reserve;
   end if;
@@ -362,8 +363,8 @@ PROCEDURE process_avg_rsrv_rcrds_btch (parm_targets IN gurowner.avg_targets%rowt
               cmpny_cd, clm_nmbr, rsk_sgmt_cd, rt_strctr_cd,
               rt_st_cd, lob_cd, vhcl_typ_cd, prvt_psngr_cd, yrs_insrd_cd, cvrg_cd,
               clm_smbl, clmnt, avg_ADJ_AMT)
-          values
-            (GUROWNER.GUR_avg_SEQ.currval, target_filename, ' ',
+         values
+            (GUROWNER.GUR_avg_SEQ.currval, target_filename, parm_runid , 
               to_char(l_acc_dt(i),'yy'), to_char(l_acc_dt(i),'mm'),
               'C', l_cmpny_cd(i), l_claim_no(i), l_risk_seg(i),
               l_rate_struc(i), l_rated_st(i), l_LOB_CD(i), l_veh_type(i), l_priv_pass(i),
@@ -389,7 +390,7 @@ PROCEDURE process_avg_rsrv_rcrds_btch (parm_targets IN gurowner.avg_targets%rowt
           rt_st_cd, lob_cd, vhcl_typ_cd, prvt_psngr_cd, yrs_insrd_cd, cvrg_cd,
           clm_smbl, clmnt, avg_adj_amt)
       values
-        (GUROWNER.GUR_avg_SEQ.currval, target_filename, ' ', 
+            (GUROWNER.GUR_avg_SEQ.currval, target_filename, parm_runid , 
           to_char(l_acc_dt(i),'yy'), to_char(l_acc_dt(i),'mm'),
           'F', l_cmpny_cd(i), l_claim_no(i), l_risk_seg(i),
           l_rate_struc(i), l_rated_st(i), l_LOB_CD(i), l_veh_type(i), l_priv_pass(i),
@@ -414,12 +415,14 @@ PROCEDURE process_avg_rsrv_rcrds_btch (parm_targets IN gurowner.avg_targets%rowt
   pass1_tm := dbms_utility.get_time;
   elapsed := pass1_tm - start_tm;
   --dbms_output.put_line('pass1 elapsed = ' || to_char(elapsed));
+  <<bypass_reserve>>
   /*----------------------------------------------------------         
   The only way avg_sum can be zero at this point is if the first
   fetch returned zero rows. We may want to abort here, but
   right now just show the error.
   ----------------------------------------------------------*/  
-  if avg_sum = 0 then
+  if avg_sum = 0 or
+     avg_sum is null then
     --DBMS_OUTPUT.PUT_LINE ('No data matches this target grouping, ' || target_filename);
     parmcode := '002';
     parmbuf := 'No data matches this target grouping, ' || target_filename;
@@ -434,7 +437,6 @@ PROCEDURE process_avg_rsrv_rcrds_btch (parm_targets IN gurowner.avg_targets%rowt
   --dbms_output.put_line('pass1 elapsed = ' || to_char(elapsed ));
   --DBMS_OUTPUT.PUT_LINE('CO     CLAIM_NO    ' ||
   --  '      ADJ COV  RND COV TRUNC FEAT DIFF ADJ  FINAL SUM');
-  <<bypass_reserve>>
   /*----------------------------------------------------------         
   Second pass, create the spread.              
   ----------------------------------------------------------*/  
@@ -474,19 +476,19 @@ PROCEDURE process_avg_rsrv_rcrds_btch (parm_targets IN gurowner.avg_targets%rowt
       if l_CVRG_CD(i) != prev_cov or
         l_claim_no(i) != prev_claim or
         prev_cov is null or
-        prev_claim is null then
-        first_feat := 'Y'; 
+        prev_claim is null then 
+           first_feat := 'Y';
            insert into GUROWNER.AVG_ADJSTMNTS_BAL
              (avg_adjstmnts_id, filename, run_id, accdnt_yr, accdnt_mnth, rcrd_id,
              cmpny_cd, clm_nmbr, rsk_sgmt_cd, rt_strctr_cd,
              rt_st_cd, lob_cd, vhcl_typ_cd, prvt_psngr_cd, yrs_insrd_cd, cvrg_cd,
              clm_smbl, clmnt, avg_ADJ_AMT)
            values
-             (GUROWNER.GUR_avg_SEQ.currval, target_filename, ' ',
+             (GUROWNER.GUR_avg_SEQ.currval, target_filename, parm_runid,
              to_char(l_acc_dt(i),'yy'), to_char(l_acc_dt(i),'mm'),
              'C', l_cmpny_cd(i), l_claim_no(i), l_risk_seg(i),
              l_rate_struc(i), l_rated_st(i), l_LOB_CD(i), l_veh_type(i), l_priv_pass(i),
-             l_policy_yrs(i), l_CVRG_CD(i), ' ', ' ', adj_amt_cvg);
+             l_policy_yrs(i), l_CVRG_CD(i), ' ', ' ', adj_amt_cvg); 
       end if;
       if first_feat = 'Y' then 
          COV_DIFF := round_cov - trunc_feat * l_feat_cnt(i);       
@@ -503,7 +505,7 @@ PROCEDURE process_avg_rsrv_rcrds_btch (parm_targets IN gurowner.avg_targets%rowt
            rt_st_cd, lob_cd, vhcl_typ_cd, prvt_psngr_cd, yrs_insrd_cd, cvrg_cd,
            clm_smbl, clmnt, avg_adj_amt)
          values
-           (GUROWNER.GUR_avg_SEQ.currval, target_filename, ' ', 
+           (GUROWNER.GUR_avg_SEQ.currval, target_filename, parm_runid, 
            to_char(l_acc_dt(i),'yy'), to_char(l_acc_dt(i),'mm'),
            'F', l_cmpny_cd(i), l_claim_no(i), l_risk_seg(i),
            l_rate_struc(i), l_rated_st(i), l_LOB_CD(i), l_veh_type(i), l_priv_pass(i),
@@ -512,7 +514,7 @@ PROCEDURE process_avg_rsrv_rcrds_btch (parm_targets IN gurowner.avg_targets%rowt
       prev_claim := l_claim_no(i);
       FINAL_SUM := final_sum + adj_amt;
 --      total_res := total_res + l_case_res(i);
-        total_res := total_res + (l_case_res(i)/l_feat_cnt(i)); -- code changes after test case # 1
+        total_res := total_res + (l_case_res(i) / l_feat_cnt(i)); -- code changes after test case # 1
 
       total_res_num := total_res_num + 1;
       --if l_claim_no(i) = '0003293960101424' then
@@ -586,7 +588,7 @@ PROCEDURE process_avg_rsrv_rcrds_btch (parm_targets IN gurowner.avg_targets%rowt
 END process_avg_rsrv_rcrds_btch;
 
 PROCEDURE process_avg_rsrv_rcrds (errbuf  OUT VARCHAR2, retcode OUT VARCHAR2,
-  account_date in Date, parm_filename in varchar2, limit_in IN PLS_INTEGER DEFAULT 200, RUNID IN VARCHAR2, RN_CNTRL_Q_ID IN VARCHAR2 )
+  account_date in Date, parm_filename in varchar2, limit_in IN PLS_INTEGER DEFAULT 200, parm_runid IN VARCHAR2, PARM_RN_CNTRL_Q_ID IN VARCHAR2 )
 --  account_date in Date, parm_filename in varchar2,   limit_in IN PLS_INTEGER DEFAULT 200)
     is
   /*---------------------------------------------------------------------------
@@ -620,6 +622,7 @@ PROCEDURE process_avg_rsrv_rcrds (errbuf  OUT VARCHAR2, retcode OUT VARCHAR2,
   firstcode varchar2(3)   := null;
   parmbuf   varchar2(200) := null;
   parmcode  varchar2(3)   := null;
+  Operation_Status  number (38);
   cursor c2 is 
     /*------------------------------------------------------------------
     This cursor retrieves rows that match file name from ibnr_targets.
@@ -671,7 +674,7 @@ PROCEDURE process_avg_rsrv_rcrds (errbuf  OUT VARCHAR2, retcode OUT VARCHAR2,
       --DBMS_OUTPUT.PUT_LINE('target id = ' || to_char(parm_targets.avg_targets_id)
       --|| ', filename = ' || parm_targets.filename 
       --|| ', target = ' || to_char(parm_targets.trgt));
-      process_avg_rsrv_rcrds_btch(parm_targets, account_date, parmbuf, parmcode,
+      process_avg_rsrv_rcrds_btch(parm_targets, account_date, parm_runid, parmbuf, parmcode,
         limit_in);
       /*-------------------------------------------------------------
       Check for error code. If we have one, write it to firstcode.
@@ -701,9 +704,10 @@ PROCEDURE process_avg_rsrv_rcrds (errbuf  OUT VARCHAR2, retcode OUT VARCHAR2,
     /*------------------------------------------------------
     * summarize amount over duplicate records
     -------------------------------------------------------*/
-    if parmcode > '900' then
-       null;
-    else
+--    if parmcode > '900' then
+--      null;     
+    if parmcode < '900' or parmcode is null then
+--    else
        insert into gurowner.avg_adjstmnts
          (SELECT AVG_ADJSTMNTS_ID, FILENAME, RUN_ID, ACCDNT_YR, ACCDNT_MNTH, 
           RCRD_ID, CMPNY_CD, CLM_NMBR, RSK_SGMT_CD, RT_STRCTR_CD, RT_ST_CD,
@@ -716,12 +720,21 @@ PROCEDURE process_avg_rsrv_rcrds (errbuf  OUT VARCHAR2, retcode OUT VARCHAR2,
             LOB_CD, VHCL_TYP_CD, PRVT_PSNGR_CD, YRS_INSRD_CD, CVRG_CD, CLM_SMBL, 
             CLMNT);
     end if;
-         
+
+   if parmcode is null then
+      parmcode := '0';
+      parmbuf := 'Normal end';
+  end if;        
+      
+      UPDATE GUROWNER.RN_CNTRL_Q  SET RETURN_CD = parmcode , ERR_MSG = parmbuf,
+      DT_UPDT = CURRENT_TIMESTAMP,  UPDT_USR_ID =  USER   
+      WHERE RN_CNTRL_Q_ID = PARM_RN_CNTRL_Q_ID;
+
     <<bypass_run>>
     
     --dbms_mview.refresh('mv_avg_adjstmnts');
 
-    if parmcode is null then
+    if parmcode is null or parmcode = '0' then
        errbuf := 'Normal end';
        retcode := '0';
     else
@@ -744,7 +757,9 @@ PROCEDURE process_avg_rsrv_rcrds (errbuf  OUT VARCHAR2, retcode OUT VARCHAR2,
          c.clm_smbl = b.clm_smbl)
        order by c.clm_nmbr;
        -------------------------------------------------------*/
-    commit;
+    --commit;
+       CLEAN_AVG_TRGTS_SVRTY(parm_filename,Operation_Status) ;
+
     DBMS_OUTPUT.PUT_LINE('retcode = ' || retcode ||
        ', errbuf = ' || errbuf);
   END process_avg_rsrv_rcrds;
@@ -893,6 +908,7 @@ REC_AVG_TARGETS_SEVERITY CUR_AVG_TARGETS_SEVERITY%ROWTYPE;
 
 ageFactor numeric(6,0);
 fileName varchar2(100);
+targetId number(38);
 BEGIN
 Operation_Status:=0;
 Open CUR_AVG_TARGETS_SEVERITY;
@@ -902,6 +918,7 @@ exit when CUR_AVG_TARGETS_SEVERITY%NOTFOUND;
 
 --DBMS_OUTPUT.put_line(REC_AVG_TARGETS_SEVERITY.RISK_SEGMENT_GRP);
 fileName := REC_AVG_TARGETS_SEVERITY.FILE_NAME;
+targetId :=GUROWNER.GUR_AVG_TRGT_SEQ.NEXTVAL;
 INSERT
 INTO AVG_TARGETS
   (
@@ -920,7 +937,7 @@ INTO AVG_TARGETS
   )
   VALUES
   (
-    GUROWNER.GUR_AVG_TRGT_SEQ.NEXTVAL,
+    targetId,
     REC_AVG_TARGETS_SEVERITY.FILE_ROW_NUM,
     REC_AVG_TARGETS_SEVERITY.FILE_NAME,
     REC_AVG_TARGETS_SEVERITY.RISK_SEGMENT_GRP,
@@ -1063,7 +1080,7 @@ ageFactor:= Case i
 --DBMS_OUTPUT.put_line(num);
 INSERT INTO AVG_SEVERITY
   (AVG_SEVERITY_ID, AGE, SVRTY) VALUES
-  (GUROWNER.GUR_AVG_TRGT_SEQ.CURRVAL, i, ageFactor);
+  (targetId, i, ageFactor);
   
 END LOOP; 
 
