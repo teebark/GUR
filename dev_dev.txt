@@ -1,6 +1,6 @@
-create or replace PACKAGE BODY                                                                           pkg_development_reserve AS
+create or replace PACKAGE BODY                                             pkg_development_reserve AS
 PROCEDURE process_dev_rsrv_rcrds_btch (parm_targets in gurowner.dev_targets%rowtype, 
-  account_date in Date, parmbuf out varchar2, parmcode out varchar2, limit_in IN PLS_INTEGER DEFAULT 200)
+  account_date in Date, parm_runid in varchar2, parmbuf out varchar2, parmcode out varchar2, limit_in IN PLS_INTEGER DEFAULT 200)
   is
   /*------------------------------------------------------------
   Stored procedure for Ground Up Reserving, Development process.
@@ -116,6 +116,7 @@ PROCEDURE process_dev_rsrv_rcrds_btch (parm_targets in gurowner.dev_targets%rowt
   threshld        parm_targets.thrshld%type        := parm_targets.thrshld;
   target          parm_targets.trgt%type           := parm_targets.trgt;
   target_filename parm_targets.filename%type       := rtrim(parm_targets.filename);
+
   
   adj_run_seq number (38);
   start_tm number(12);
@@ -355,7 +356,7 @@ PROCEDURE process_dev_rsrv_rcrds_btch (parm_targets in gurowner.dev_targets%rowt
    
     if case_sum is null then
       --DBMS_OUTPUT.PUT_LINE ('No data matches this target grouping, ' || target_filename
-      --|| ', ID = ' || to_char(target_id));
+      --  || ', ID = ' || to_char(target_id));
       parmcode := '002';
       parmbuf := 'No data matches this target grouping, ' || target_filename
         || ', ID = ' || to_char(target_id);
@@ -459,12 +460,12 @@ PROCEDURE process_dev_rsrv_rcrds_btch (parm_targets in gurowner.dev_targets%rowt
               Run_id is omitted on purpose.
               ----------------------------------------------------------*/
               insert into GUROWNER.DEV_ADJSTMNTS_BAL
-                (dev_adjstmnts_id, filename, accdnt_yr, accdnt_mnth, rcrd_id,
+                (dev_adjstmnts_id, filename, RUN_ID, accdnt_yr, accdnt_mnth, rcrd_id,
                 cmpny_cd, clm_nmbr, rsk_sgmt_cd, rt_strctr_cd,
                 rt_st_cd, lob_cd, vhcl_typ_cd, prvt_psngr_cd, yrs_insrd_cd, cvrg_cd,
                 clm_smbl, clmnt, cse_rsv_amnt, DEV_ADJ_AMT, ftr_rsv_amnt, age)
               values
-               (GUROWNER.GUR_DEV_SEQ.currval, target_filename, to_char(l_acc_dt(i),'yy'), to_char(l_acc_dt(i),'mm'),
+               (GUROWNER.GUR_DEV_SEQ.currval, target_filename, parm_runid,to_char(l_acc_dt(i),'yy'), to_char(l_acc_dt(i),'mm'),
                'C', l_cmpny_cd(i), l_claim_no(i), l_risk_seg(i),
                l_rate_struc(i), l_rated_st(i), l_LOB_CD(i), l_veh_type(i), l_priv_pass(i),
                l_policy_yrs(i), l_CVRG_CD(i), ' ', ' ',
@@ -481,12 +482,12 @@ PROCEDURE process_dev_rsrv_rcrds_btch (parm_targets in gurowner.dev_targets%rowt
                first_feat := 'N';
             end if;
             insert into GUROWNER.DEV_ADJSTMNTS_BAL
-              (dev_adjstmnts_id, filename, accdnt_yr, accdnt_mnth, rcrd_id,
+              (dev_adjstmnts_id, filename,run_id,  accdnt_yr, accdnt_mnth, rcrd_id,
               cmpny_cd, clm_nmbr, rsk_sgmt_cd, rt_strctr_cd,
               rt_st_cd, lob_cd, vhcl_typ_cd, prvt_psngr_cd, yrs_insrd_cd, cvrg_cd,
               clm_smbl, clmnt, cse_rsv_amnt, DEV_ADJ_AMT, ftr_rsv_amnt,age)
             values
-             (GUROWNER.GUR_DEV_SEQ.currval, target_filename, to_char(l_acc_dt(i),'yy'), to_char(l_acc_dt(i),'mm'),
+             (GUROWNER.GUR_DEV_SEQ.currval, target_filename, parm_runid,  to_char(l_acc_dt(i),'yy'), to_char(l_acc_dt(i),'mm'),
              'F', l_cmpny_cd(i), l_claim_no(i), l_risk_seg(i),
              l_rate_struc(i), l_rated_st(i), l_LOB_CD(i), l_veh_type(i), l_priv_pass(i),
              l_policy_yrs(i), l_CVRG_CD(i), l_CLM_SMBL(i), l_claimant(i),
@@ -534,6 +535,8 @@ PROCEDURE process_dev_rsrv_rcrds_btch (parm_targets in gurowner.dev_targets%rowt
   close c1;
   pass2_tm := dbms_utility.get_time;
   elapsed := pass2_tm - pass1_tm;
+  
+  --total_res := 666; --DEBUG BALANCE
   --dbms_output.put_line('pass2 elapsed = ' || to_char(elapsed));
   if target = 0 then -- this means we don't want target calc, bypass doing the target calc
     goto bypass_target;
@@ -625,12 +628,12 @@ PROCEDURE process_dev_rsrv_rcrds_btch (parm_targets in gurowner.dev_targets%rowt
          Run_id is omitted on purpose.
          ----------------------------------------------------------*/
          insert into GUROWNER.DEV_ADJSTMNTS_BAL
-          (dev_adjstmnts_id, filename, accdnt_yr, accdnt_mnth, rcrd_id,
+          (dev_adjstmnts_id, filename, run_id, accdnt_yr, accdnt_mnth, rcrd_id,
           cmpny_cd, clm_nmbr, rsk_sgmt_cd, rt_strctr_cd,
           rt_st_cd, lob_cd, vhcl_typ_cd, prvt_psngr_cd, yrs_insrd_cd, cvrg_cd,
           clm_smbl, clmnt, cse_rsv_amnt, DEV_ADJ_AMT, ftr_rsv_amnt, age)
          values
-          (GUROWNER.GUR_DEV_SEQ.currval, target_filename, to_char(l_acc_dt(i),'yy'), to_char(l_acc_dt(i),'mm'),
+          (GUROWNER.GUR_DEV_SEQ.currval, target_filename, parm_runid, to_char(l_acc_dt(i),'yy'), to_char(l_acc_dt(i),'mm'),
           'C', l_cmpny_cd(i), l_claim_no(i), l_risk_seg(i),
           l_rate_struc(i), l_rated_st(i), l_LOB_CD(i), l_veh_type(i), l_priv_pass(i),
           l_policy_yrs(i), l_CVRG_CD(i), ' ', ' ',
@@ -656,12 +659,12 @@ PROCEDURE process_dev_rsrv_rcrds_btch (parm_targets in gurowner.dev_targets%rowt
       --  || l_case_res(i)   || ' ' || adj_amt        || '  ' || l_feat_res(i) || '   '
       --  || l_age(i));
       insert into GUROWNER.DEV_ADJSTMNTS_BAL
-        (dev_adjstmnts_id, filename, accdnt_yr, accdnt_mnth, rcrd_id,
+        (dev_adjstmnts_id, filename, run_id, accdnt_yr, accdnt_mnth, rcrd_id,
         cmpny_cd, clm_nmbr, rsk_sgmt_cd, rt_strctr_cd,
         rt_st_cd, lob_cd, vhcl_typ_cd, prvt_psngr_cd, yrs_insrd_cd, cvrg_cd,
         clm_smbl, clmnt, cse_rsv_amnt, DEV_ADJ_AMT, ftr_rsv_amnt, age)
       values
-        (GUROWNER.GUR_DEV_SEQ.currval, target_filename, to_char(l_acc_dt(i),'yy'), to_char(l_acc_dt(i),'mm'),
+        (GUROWNER.GUR_DEV_SEQ.currval, target_filename, parm_runid, to_char(l_acc_dt(i),'yy'), to_char(l_acc_dt(i),'mm'),
         'F', l_cmpny_cd(i), l_claim_no(i), l_risk_seg(i),
         l_rate_struc(i), l_rated_st(i), l_LOB_CD(i), l_veh_type(i), l_priv_pass(i),
         l_policy_yrs(i), l_CVRG_CD(i), l_CLM_SMBL(i), l_claimant(i),
@@ -680,7 +683,7 @@ PROCEDURE process_dev_rsrv_rcrds_btch (parm_targets in gurowner.dev_targets%rowt
       --   || ' ' || to_char(l_case_split(i))
       --   || '   ' || to_char(target_spread_ratio)
       --   || '   ' || to_char(target_respread) || '        '  || to_char(adj_amt)
-      --   || '  ' || to_char(round_feat) || '  ' || to_char(round_cov) 
+      --   || '  ' || to_char(trunc_feat) || '  ' || to_char(round_cov) 
       --   || '  ' || to_char(cov_diff) 
       --   || '      ' || to_char(target_final_sum));
       
@@ -750,7 +753,7 @@ PROCEDURE process_dev_rsrv_rcrds_btch (parm_targets in gurowner.dev_targets%rowt
 END process_dev_rsrv_rcrds_btch;
 
 PROCEDURE process_dev_rsrv_rcrds (errbuf  OUT VARCHAR2,retcode OUT VARCHAR2,
-    account_date in Date, parm_filename in varchar2, limit_in IN PLS_INTEGER DEFAULT 200, RUNID IN VARCHAR2, RN_CNTRL_Q_ID IN VARCHAR2 )
+    account_date in Date, parm_filename in varchar2, limit_in IN PLS_INTEGER DEFAULT 200, PARM_RUNID IN VARCHAR2, PARM_RN_CNTRL_Q_ID IN VARCHAR2 )
  -- account_date in Date, parm_filename in varchar2, limit_in IN PLS_INTEGER DEFAULT 200  )
   is
   /*----------------------------------------------------------------------------
@@ -777,6 +780,8 @@ PROCEDURE process_dev_rsrv_rcrds (errbuf  OUT VARCHAR2,retcode OUT VARCHAR2,
   firstcode varchar2(3)   := null;
   parmbuf   varchar2(200) := null;
   parmcode  varchar2(3)   := null;
+  Operation_Status  number (38);
+
   cursor c2 is
     /*----------------------------------------------------------
     This cursor retrieves the threshld, target amt from dev_targets.
@@ -817,7 +822,7 @@ PROCEDURE process_dev_rsrv_rcrds (errbuf  OUT VARCHAR2,retcode OUT VARCHAR2,
       --|| ', filename = ' || parm_targets.filename 
       --|| ', threshld = ' || to_char(parm_targets.thrshld) 
       --|| ', target = ' || to_char(parm_targets.trgt));
-      process_dev_rsrv_rcrds_btch(parm_targets, account_date, parmbuf, parmcode);
+      process_dev_rsrv_rcrds_btch(parm_targets, account_date, parm_runid, parmbuf, parmcode);
       
     if parmcode is null then
        null;
@@ -841,23 +846,33 @@ PROCEDURE process_dev_rsrv_rcrds (errbuf  OUT VARCHAR2,retcode OUT VARCHAR2,
     end if;
     close c2;
 
-    if parmcode > '900' then  --- out of balance or catastrophic error like dup row , don't wrwrite to output tablem bypass
-   null;
-else
-   insert into gurowner.dev_adjstmnts
-   (select *
-   from gurowner.dev_adjstmnts_bal);
+--    if parmcode > '900' then  --- out of balance or catastrophic error like dup row , don't write to output tablem bypass
+ --  null;
+    if parmcode < '900' or parmcode is null then
+       insert into gurowner.dev_adjstmnts
+       (select *
+        from gurowner.dev_adjstmnts_bal);
 end if;
 
+   if parmcode is null or parmcode = '0' then
+      parmcode := '0';
+      parmbuf := 'Normal end';
+  end if;        
+      UPDATE GUROWNER.RN_CNTRL_Q  SET RETURN_CD = parmcode , ERR_MSG = parmbuf,
+      DT_UPDT = CURRENT_TIMESTAMP,  UPDT_USR_ID =  USER   
+      WHERE RN_CNTRL_Q_ID = PARM_RN_CNTRL_Q_ID;
+
   <<bypass_run>>
-    if parmcode is null then
+    if parmcode is null or parmcode = '0' then
        errbuf := 'Normal end';
        retcode := '0';
     else
        errbuf := firstbuf;
        retcode := firstcode;
        end if;
-    commit;
+--    commit;
+     CLEAN_AVG_TRGTS_SVRTY(parm_filename,Operation_Status) ; 
+
     DBMS_OUTPUT.PUT_LINE('retcode = ' || retcode ||
        ', errbuf = ' || errbuf);
   END process_dev_rsrv_rcrds;
@@ -1005,6 +1020,7 @@ REC_DEV_TARGETS_FACTORS CUR_DEV_TARGETS_FACTORS%ROWTYPE;
 
 ageFactor number(6,4);
 fileName varchar2(100);
+targetId number(38);
 BEGIN
 Operation_Status:=0;
 Open CUR_DEV_TARGETS_FACTORS;
@@ -1014,6 +1030,7 @@ exit when CUR_DEV_TARGETS_FACTORS%NOTFOUND;
 
 --DBMS_OUTPUT.put_line(REC_DEV_TARGETS_FACTORS.RISK_SEGMENT_GRP);
 fileName := REC_DEV_TARGETS_FACTORS.FILE_NAME;
+targetId :=GUROWNER.GUR_TARGET_SEQ.NEXTVAL;
 INSERT
 INTO DEV_TARGETS
   (
@@ -1033,7 +1050,7 @@ INTO DEV_TARGETS
   )
   VALUES
   (
-    GUROWNER.GUR_TARGET_SEQ.NEXTVAL,
+    targetId,
     REC_DEV_TARGETS_FACTORS.FILE_ROW_NUM,
     REC_DEV_TARGETS_FACTORS.FILE_NAME,
     REC_DEV_TARGETS_FACTORS.RISK_SEGMENT_GRP,
@@ -1177,7 +1194,7 @@ ageFactor:= Case i
 --DBMS_OUTPUT.put_line(ageFactor);
 INSERT INTO DEV_FACTORS
   (DEV_FACTORS_ID, AGE, FCTR) VALUES
-  (GUROWNER.GUR_TARGET_SEQ.CURRVAL, i, ageFactor);
+  (targetId, i, ageFactor);
   
 END LOOP; 
 
