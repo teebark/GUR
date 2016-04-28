@@ -1,6 +1,6 @@
 create or replace PACKAGE BODY                                                                                             PKG_IBNR_RESERVE AS   
 PROCEDURE process_ibnr_rsrv_rcrds_btch (parm_targets IN gurowner.ibnr_targets%rowtype, 
-  account_date in Date, parmbuf out varchar2, parmcode out varchar2,
+  account_date in Date,  parm_runid in varchar2, parmbuf out varchar2, parmcode out varchar2,
   limit_in IN PLS_INTEGER DEFAULT 200)
   is
   /*--------------------------------------------------------------
@@ -447,7 +447,7 @@ PROCEDURE process_ibnr_rsrv_rcrds_btch (parm_targets IN gurowner.ibnr_targets%ro
       BEGIN
       if target = 0 then
         insert into GUROWNER.ibnr_ADJSTMNTS_bal
-          (ibnr_adjstmnts_id, filename, accdnt_yr, 
+          (ibnr_adjstmnts_id, filename, run_id,  accdnt_yr, 
           accdnt_mnth, cmpny_cd, rsk_sgmt_cd, 
           rt_strctr_cd, rt_st_cd, lob_cd, 
           vhcl_typ_cd, prvt_psngr_cd, yrs_insrd_cd, 
@@ -456,7 +456,7 @@ PROCEDURE process_ibnr_rsrv_rcrds_btch (parm_targets IN gurowner.ibnr_targets%ro
           TTL_WGHTD_IBNR_EXPSR, NWBNSS_AUTO_IBNR_RSRV, NWBNSS_RV_IBNR_RSRV, 
           SSNDBNSS_AUTO_IBNR_RSRV, SSNDBNSS_RV_IBNR_RSRV, TTL_IBNR_RSRV)
         values
-          (GUROWNER.GUR_ibnr_SEQ.currval, target_filename, substr(l_ibnr(i).accnt_yr,3,2), 
+          (GUROWNER.GUR_ibnr_SEQ.currval, target_filename,  parm_runid , substr(l_ibnr(i).accnt_yr,3,2), 
           l_ibnr(i).accnt_mnth, l_ibnr(i).cmpny_cd, l_ibnr(i).rsk_sgmt_cd,
           l_ibnr(i).rt_strctr_cd, l_ibnr(i).rt_st_cd, l_ibnr(i).LOB_CD, 
           l_ibnr(i).vhcl_typ_cd, l_ibnr(i).prvt_psngr_cd, l_ibnr(i).yrs_insrd_cd,
@@ -466,7 +466,7 @@ PROCEDURE process_ibnr_rsrv_rcrds_btch (parm_targets IN gurowner.ibnr_targets%ro
           AUTO_SSN_RES, RV_SSN_RES, TOTAL_RES);
       else
           insert into GUROWNER.ibnr_ADJSTMNTS_bal
-          (ibnr_adjstmnts_id, filename, accdnt_yr, 
+          (ibnr_adjstmnts_id, filename, run_id, accdnt_yr, 
           accdnt_mnth, cmpny_cd, rsk_sgmt_cd, 
           rt_strctr_cd, rt_st_cd, lob_cd, 
           vhcl_typ_cd, prvt_psngr_cd, yrs_insrd_cd, 
@@ -475,7 +475,7 @@ PROCEDURE process_ibnr_rsrv_rcrds_btch (parm_targets IN gurowner.ibnr_targets%ro
           TTL_WGHTD_IBNR_EXPSR, NWBNSS_AUTO_IBNR_RSRV, NWBNSS_RV_IBNR_RSRV, 
           SSNDBNSS_AUTO_IBNR_RSRV, SSNDBNSS_RV_IBNR_RSRV, TTL_IBNR_RSRV)
         values
-          (GUROWNER.GUR_ibnr_SEQ.currval, target_filename, substr(l_ibnr(i).accnt_yr,3,2), 
+          (GUROWNER.GUR_ibnr_SEQ.currval, target_filename,  parm_runid , substr(l_ibnr(i).accnt_yr,3,2), 
           l_ibnr(i).accnt_mnth, l_ibnr(i).cmpny_cd, l_ibnr(i).rsk_sgmt_cd,
           l_ibnr(i).rt_strctr_cd, l_ibnr(i).rt_st_cd, l_ibnr(i).LOB_CD, 
           l_ibnr(i).vhcl_typ_cd, l_ibnr(i).prvt_psngr_cd, l_ibnr(i).yrs_insrd_cd,
@@ -557,7 +557,7 @@ PROCEDURE process_ibnr_rsrv_rcrds_btch (parm_targets IN gurowner.ibnr_targets%ro
 END process_ibnr_rsrv_rcrds_btch;
 
 PROCEDURE process_ibnr_rsrv_rcrds (errbuf OUT VARCHAR2, retcode OUT VARCHAR2,
-    account_date in Date, parm_filename in varchar2, limit_in IN PLS_INTEGER DEFAULT 200, RUNID IN VARCHAR2, RN_CNTRL_Q_ID IN VARCHAR2 )
+    account_date in Date, parm_filename in varchar2, limit_in IN PLS_INTEGER DEFAULT 200, PARM_RUNID IN VARCHAR2, PARM_RN_CNTRL_Q_ID IN VARCHAR2 )
 --  account_date in Date, parm_filename in varchar2, limit_in IN PLS_INTEGER DEFAULT 200)
   is
   /*---------------------------------------------------------------------------
@@ -579,6 +579,7 @@ PROCEDURE process_ibnr_rsrv_rcrds (errbuf OUT VARCHAR2, retcode OUT VARCHAR2,
   firstcode varchar2(3)   := null;
   parmbuf   varchar2(100) := null;
   parmcode  varchar2(3)   := null;
+  Operation_Status  number (38);
   cursor c2 is 
     /*-----------------------------------------------------------------
     This cursor retrieves rows that match file name from ibnr_targets.
@@ -629,7 +630,7 @@ PROCEDURE process_ibnr_rsrv_rcrds (errbuf OUT VARCHAR2, retcode OUT VARCHAR2,
       EXIT WHEN c2%NOTFOUND OR c2%NOTFOUND IS NULL;
       --DBMS_OUTPUT.PUT_LINE('target id = ' || to_char(parm_targets.ibnr_targets_id) ||
       --   ', target = ' || to_char(parm_targets.trgt));
-      process_ibnr_rsrv_rcrds_btch(parm_targets, account_date, parmbuf, parmcode,
+      process_ibnr_rsrv_rcrds_btch(parm_targets, account_date,  parm_runid , parmbuf, parmcode,
         limit_in);
       /*-------------------------------------------------------------
       Check for error code. If we have one, write it to firstcode.
@@ -640,14 +641,10 @@ PROCEDURE process_ibnr_rsrv_rcrds (errbuf OUT VARCHAR2, retcode OUT VARCHAR2,
       if parmcode is null then
          null;
       else
-         if parmcode = '999' then
             firstcode := parmcode;
             firstbuf  := parmbuf;
+         if parmcode > '900' then
             exit;
-         end if;
-         if firstcode is null then
-            firstbuf  := parmbuf;
-            firstcode := parmcode;
          end if;
       end if;
     END LOOP;
@@ -658,11 +655,13 @@ PROCEDURE process_ibnr_rsrv_rcrds (errbuf OUT VARCHAR2, retcode OUT VARCHAR2,
          firstbuf := parmbuf;
          firstcode := parmcode;
        end if;
+       goto bypass_run; --- aded code for missing target row issue. 
     end if;
     close c2;
-    if parmcode > '900' then
-       null;
-    else
+--    if parmcode > '900' then
+--       null;
+    --else
+      if parmcode < '900' or parmcode is null then
        insert into GUROWNER.ibnr_ADJSTMNTS
           (select ibnr_adjstmnts_id, filename, run_id, accdnt_yr, 
             accdnt_mnth, cmpny_cd, rsk_sgmt_cd, 
@@ -674,15 +673,28 @@ PROCEDURE process_ibnr_rsrv_rcrds (errbuf OUT VARCHAR2, retcode OUT VARCHAR2,
             SSNDBNSS_AUTO_IBNR_RSRV, SSNDBNSS_RV_IBNR_RSRV, TTL_IBNR_RSRV
           FROM gurowner.IBNR_ADJSTMNTS_BAL);
     end if;
+
+   if parmcode is null then
+      parmcode := '0';
+      parmbuf := 'Normal end';
+  end if;        
+      
+      UPDATE GUROWNER.RN_CNTRL_Q  SET RETURN_CD = parmcode , ERR_MSG = parmbuf,
+      DT_UPDT = CURRENT_TIMESTAMP,  UPDT_USR_ID =  USER   
+      WHERE RN_CNTRL_Q_ID = PARM_RN_CNTRL_Q_ID;
+    
     <<bypass_run>>
-    if parmcode is null then
+    if parmcode is null or parmcode = '0' then
        errbuf := 'Normal end';
        retcode := '0';
     else
        errbuf := firstbuf;
        retcode := firstcode;
     end if;
-    commit;
+    
+    --commit;
+    CLEAN_IBNR_TRGTS_FCTRS (parm_filename,Operation_Status);
+    
     DBMS_OUTPUT.PUT_LINE('retcode = ' || retcode ||
        ', errbuf = ' || errbuf);
 END process_ibnr_rsrv_rcrds;
@@ -838,7 +850,7 @@ expectedFrequencyFactor numeric(5,2);
 calendarAgeFactor numeric(5,4);
 emergenceFactor numeric(5,4);
 severityFactor numeric(6,0);
-
+targetId number(38);
 fileName varchar2(100);
 BEGIN
 Operation_Status:=0;
@@ -850,6 +862,7 @@ exit when CUR_IBNR_TARGETS_FACTORS%NOTFOUND;
 
 --DBMS_OUTPUT.put_line(REC_IBNR_TARGETS_FACTORS.RISK_SEGMENT_GRP);
 fileName := REC_IBNR_TARGETS_FACTORS.FILE_NAME;
+targetId :=GUROWNER.GUR_IBNR_TRGT_SEQ.NEXTVAL;
 --DBMS_OUTPUT.put_line( REC_IBNR_TARGETS_FACTORS.TRGT);
 INSERT
 INTO IBNR_TARGETS
@@ -871,7 +884,7 @@ INTO IBNR_TARGETS
   )
   VALUES
   (
-    GUROWNER.GUR_IBNR_TRGT_SEQ.NEXTVAL,
+    targetId,
     REC_IBNR_TARGETS_FACTORS.FILE_ROW_NUM,
     REC_IBNR_TARGETS_FACTORS.FILE_NAME,
     REC_IBNR_TARGETS_FACTORS.RISK_SEGMENT_GRP,
@@ -1022,7 +1035,7 @@ severityFactor:=regexp_substr(regexp_substr(ageFactors,'[^,]+', 1,4),'[^--]+',1,
 
 INSERT INTO IBNR_FACTORS
   (IBNR_SEVERITY_ID, AGE, EXP_FREQ_FCTR,CAL_YR_ADJ_FCTR,EMRGNC_FCTR,SVRTY) VALUES
-  (GUROWNER.GUR_IBNR_TRGT_SEQ.CURRVAL, i, expectedFrequencyFactor,calendarAgeFactor,emergenceFactor,severityFactor);
+  (targetId, i, expectedFrequencyFactor,calendarAgeFactor,emergenceFactor,severityFactor);
   
 END LOOP; 
 
