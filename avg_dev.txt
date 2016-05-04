@@ -3,7 +3,7 @@ PROCEDURE process_avg_rsrv_rcrds_btch (parm_targets IN gurowner.avg_targets%rowt
   account_date in Date, parm_runid in varchar2, parmbuf out varchar2, parmcode out varchar2,
   limit_in IN PLS_INTEGER DEFAULT 200)
   is
-  /*-------------------------------------------------------------
+  /*------------------------------------------------------------
   Stored procedure for Ground Up Reserving, Average process.
   This is a subroutine, called by process_avg_rsrv_rcrds.
   Input table is from Data Migrator, which converts the pending
